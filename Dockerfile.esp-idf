@@ -1,0 +1,36 @@
+FROM ubuntu:22.04
+
+ARG ESP_IDF_VERSION
+
+ENV ESP_IDF_VERSION=$ESP_IDF_VERSION
+
+# probably dfu-util and libusb-1.0-0 will also need to be installed on the host
+# since we may have difficulty flashing. In the very least /dev will need to be
+# provided to the container.
+# python3.10-venv is needed for v5.x.x
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive TZ=Asia/Japan \
+    apt-get install -y git wget flex bison gperf python3 python3-pip python3-setuptools \
+    python3.10-venv \
+    cmake ninja-build ccache libffi-dev libssl-dev dfu-util libusb-1.0-0 
+
+
+RUN DEBIAN_FRONTEND=noninteractive TZ=Asia/Japan \
+    apt-get install -y sudo vim libssl-dev bc
+
+RUN useradd -ms /bin/bash builder && usermod -aG sudo builder
+RUN echo builder:builder | chpasswd
+RUN echo '%sudo ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/010_system_sudoers
+RUN chmod 440 /etc/sudoers.d/010_system_sudoers
+RUN usermod -aG dialout builder
+USER builder
+
+WORKDIR /build/esp
+# switch to branch after checkout
+# get submodules
+RUN git clone --recursive https://github.com/espressif/esp-idf.git
+WORKDIR /build/esp/esp-idf
+RUN git checkout $ESP_IDF_VERSION
+RUN ./install.sh
+
+RUN sh -c "echo . /build/esp/esp-idf/export.sh >> /home/builder/.bashrc"

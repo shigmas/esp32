@@ -1,0 +1,22 @@
+FROM esp_idf
+
+ARG ESP32_PLATFORM
+
+ENV ESP32_PLATFORM=$ESP32_PLATFORM
+
+# There is a builder user, with /build/esp/esp-idf being the toolchain. export.sh will be
+# sourced run bash will be valid. (but not RUN)
+# 
+USER builder
+
+WORKDIR /build/proj1
+
+# I picture the standard way is, local source, or github. Initial devel will
+# just do the copy
+# Why do we have to do this as builder if we already are builder?
+COPY --chown=builder:builder src src
+
+# config for the platform
+WORKDIR /build/proj1/src/
+RUN echo setting to platform $ESP32_PLATFORM
+RUN bash -c ". /build/esp/esp-idf/export.sh && idf.py set-target $ESP32_PLATFORM"
