@@ -1,28 +1,29 @@
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 ARG ESP_IDF_VERSION
+ARG DIALOUT_GID
 
 ENV ESP_IDF_VERSION=$ESP_IDF_VERSION
+ENV DIALOUT=fakedialout
 
 # probably dfu-util and libusb-1.0-0 will also need to be installed on the host
 # since we may have difficulty flashing. In the very least /dev will need to be
 # provided to the container.
 # python3.10-venv is needed for v5.x.x
 RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive TZ=Asia/Japan \
-    apt-get install -y git wget flex bison gperf python3 python3-pip python3-setuptools \
-    python3.10-venv \
-    cmake ninja-build ccache libffi-dev libssl-dev dfu-util libusb-1.0-0 
+    DEBIAN_FRONTEND=noninteractive TZ=America/Los_Angeles \
+    apt-get install -y  git wget flex bison gperf python3 python3-pip python3-setuptools python3-venv  cmake ninja-build ccache libffi-dev libssl-dev dfu-util libusb-1.0-0
 
-
-RUN DEBIAN_FRONTEND=noninteractive TZ=Asia/Japan \
+# These are helpful for running, not for esp-idf
+RUN DEBIAN_FRONTEND=noninteractive TZ=America/Los_Angeles \
     apt-get install -y sudo vim libssl-dev bc
 
-RUN useradd -ms /bin/bash builder && usermod -aG sudo builder
+RUN groupadd -g $DIALOUT_GID $DIALOUT
+RUN useradd -m -s /bin/bash -g $DIALOUT builder && usermod -aG sudo builder
 RUN echo builder:builder | chpasswd
 RUN echo '%sudo ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/010_system_sudoers
 RUN chmod 440 /etc/sudoers.d/010_system_sudoers
-RUN usermod -aG dialout builder
+RUN usermod -aG $DIALOUT builder
 USER builder
 
 WORKDIR /build/esp
