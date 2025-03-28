@@ -3,6 +3,8 @@
 Maybe Docker is overkill. And, eventually, the source code for the projects should be in separate
 repositories. But, for now, everything is in here.
 
+Obviously, you need docker, but you also need docker-buildx (or docker-buildx-plugin, depending on your OS/distribution)
+
 ## Base
 
 In the root directory is the esp-idf base. The projects should use the Dockerfile from this. It will
