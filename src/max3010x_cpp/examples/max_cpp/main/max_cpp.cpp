@@ -4,7 +4,7 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 
-#include "include/Max3010x.h"
+#include "Max3010x.h"
 
 #define DEFAULT_ITERATIONS 32
 /* Defines */
