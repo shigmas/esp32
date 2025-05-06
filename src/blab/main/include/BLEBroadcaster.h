@@ -23,8 +23,15 @@ protected:
     void _OnStackReset(int reason);
     void _OnStackSync();
 
+    void _InitAdvertising();
+    void _StartAdvertising();
+
 private:
     std::string _name;
+
+    static uint8_t _ownAddrType;
+    static uint8_t _addrVal[6];
+
 };
 
 #endif //BLEBROADCASTER
