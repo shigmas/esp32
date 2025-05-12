@@ -38,12 +38,21 @@ extern "C" {
     void ble_store_config_init(void);
 }
 
+/* Defines */
+#define BLE_GAP_APPEARANCE_GENERIC_TAG 0x0200
+#define BLE_GAP_URI_PREFIX_HTTPS 0x17
+#define BLE_GAP_LE_ROLE_PERIPHERAL 0x00
+
+static uint8_t esp_uri[] = {BLE_GAP_URI_PREFIX_HTTPS, '/', '/', 'e', 's', 'p', 'r', 'e', 's', 's', 'i', 'f', '.', 'c', 'o', 'm'};
+
+struct ble_hs_adv_fields;
+struct ble_gap_adv_params;
+
 // helper template for converting std::bind functions to C
 template <typename T>
 struct Callback;
 
-template <typename Ret, typename... Params>
-    struct Callback<Ret(Params...)> {
+template <typename Ret, typename... Params> struct Callback<Ret(Params...)> {
     template <typename... Args> 
         static Ret callback(Args... args) {                    
         return func(args...);  
@@ -152,6 +161,14 @@ void BLEBroadcaster::_OnStackSync() {
   ESP_LOGI(TAG, "StackSync. Starting Advertising");
 
   _InitAdvertising();
+  _StartAdvertising();
+}
+
+int BLEBroadcaster::_GapEventHandler(struct ble_gap_event *event, void *arg)
+{
+    ESP_LOGI(TAG, "GAP Event Handler");
+
+    return 0;
 }
 
 void BLEBroadcaster::_InitAdvertising() {
@@ -187,7 +204,6 @@ void BLEBroadcaster::_InitAdvertising() {
 void BLEBroadcaster::_StartAdvertising()
 {
     int rc = 0;
-    const char *name;
     struct ble_hs_adv_fields adv_fields = {0};
     struct ble_hs_adv_fields rsp_fields = {0};
     struct ble_gap_adv_params adv_params = {0};
@@ -196,9 +212,8 @@ void BLEBroadcaster::_StartAdvertising()
     adv_fields.flags = BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP;
 
     /* Set device name */
-    name = ble_svc_gap_device_name();
-    adv_fields.name = (uint8_t *)name;
-    adv_fields.name_len = strlen(name);
+    adv_fields.name = (uint8_t *)_name.c_str();
+    adv_fields.name_len = _name.length();
     adv_fields.name_is_complete = 1;
 
     /* Set device tx power */
@@ -221,8 +236,8 @@ void BLEBroadcaster::_StartAdvertising()
     }
 
     /* Set device address */
-    rsp_fields.device_addr = addr_val;
-    rsp_fields.device_addr_type = own_addr_type;
+    rsp_fields.device_addr = _addrVal;
+    rsp_fields.device_addr_type = _ownAddrType;
     rsp_fields.device_addr_is_present = 1;
 
     /* Set URI */
@@ -249,8 +264,8 @@ void BLEBroadcaster::_StartAdvertising()
     adv_params.itvl_max = BLE_GAP_ADV_ITVL_MS(510);
 
     /* Start advertising */
-    rc = ble_gap_adv_start(own_addr_type, NULL, BLE_HS_FOREVER, &adv_params,
-                           gap_event_handler, NULL);
+    Callback<int(struct ble_gap_event *event, void *arg)>::func = std::bind(&BLEBroadcaster::_GapEventHandler, this, std::placeholders::_1, std::placeholders::_2);
+    rc = ble_gap_adv_start(_ownAddrType, NULL, BLE_HS_FOREVER, &adv_params, Callback<int(struct ble_gap_event *event, void *arg)>::callback, NULL);
     if (rc != 0) {
         ESP_LOGE(TAG, "failed to start advertising, error code: %d", rc);
         return;

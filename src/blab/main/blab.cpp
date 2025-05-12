@@ -10,6 +10,8 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#define HEART_RATE_TASK_PERIOD (1000 / portTICK_PERIOD_MS)
+
 extern "C" {
     void app_main(void);
 }
@@ -22,6 +24,14 @@ static void nimble_host_task(void *param) {
 
     /* This function won't return until nimble_port_stop() is executed */
     nimble_port_run();
+
+    while (1) {
+        /* Update heart rate value every 1 second */
+        ESP_LOGI(TAG, "iter");
+
+        /* Sleep */
+        vTaskDelay(HEART_RATE_TASK_PERIOD);
+    }
 
     /* Clean up at exit */
     vTaskDelete(NULL);

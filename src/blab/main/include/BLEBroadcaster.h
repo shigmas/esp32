@@ -26,11 +26,13 @@ protected:
     void _InitAdvertising();
     void _StartAdvertising();
 
+    int _GapEventHandler(struct ble_gap_event *event, void *arg);
+
 private:
     std::string _name;
 
-    static uint8_t _ownAddrType;
-    static uint8_t _addrVal[6];
+    uint8_t _ownAddrType;
+    uint8_t _addrVal[6];
 
 };
 
