@@ -1,7 +1,13 @@
 #ifndef BLEBROADCASTER
 #define BLEBROADCASTER
 
+// ble_gatt_svc_def
+#include "host/ble_gatt.h"
+//#include "services/gatt/ble_svc_gatt.h"
+
+#include <map>
 #include <string>
+#include <vector>
 
 class BLEEmitter;
 
@@ -9,10 +15,16 @@ class BLEBroadcaster {
 public:
     BLEBroadcaster(const std::string& name);
     ~BLEBroadcaster();
+
+    // sets the emitter stuff, so all the AddEmitter() calls should be complete by now
     void Init();
     void StartAdvertising();
 
-    void AddEmitter();
+    void AddEmitter(BLEEmitter *emitter);
+
+    uint32_t GetBroadcastInterval() const;
+    // fetches the data from emitters and sends it
+    void Broadcast();
     
 protected:
     int _NVSInit();
@@ -31,6 +43,10 @@ protected:
 private:
     std::string _name;
 
+    std::map<BLEEmitter*,uint16_t*> _emitterToHandle;
+
+    std::vector<ble_gatt_svc_def> _gattSvcs;
+    
     uint8_t _ownAddrType;
     uint8_t _addrVal[6];
 

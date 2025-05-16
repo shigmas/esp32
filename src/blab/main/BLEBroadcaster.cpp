@@ -31,6 +31,8 @@
 
 #include <functional>
 
+#include "BLEEmitter.h"
+
 #define TAG "blab"
 
 extern "C" {
@@ -71,6 +73,9 @@ BLEBroadcaster::BLEBroadcaster(const std::string &name) : _name(name) {}
 
 BLEBroadcaster::~BLEBroadcaster()
 {
+    for (const auto& [key, value] : _emitterToHandle) {
+        delete value;
+    }
     
 }
 
@@ -87,13 +92,27 @@ void BLEBroadcaster::Init() {
     }
 
     _GAPInit();
-
     _GATTInit();
-
     _HostConfig();
     
     return;
 }
+
+void BLEBroadcaster::AddEmitter(BLEEmitter *emitter) {
+    _emitterToHandle[emitter] = new uint16_t;
+}
+
+uint32_t BLEBroadcaster::GetBroadcastInterval() const {
+    uint32_t min = UINT32_MAX;
+    for (const auto& [key, value] : _emitterToHandle) {
+        if (key->GetEmissionInterval() < min) {
+            min = key->GetEmissionInterval();
+        }
+    }
+    return min;
+}
+
+void BLEBroadcaster::Broadcast() {}
 
 int BLEBroadcaster::_NVSInit() {
     esp_err_t ret;
@@ -128,15 +147,44 @@ int BLEBroadcaster::_GAPInit()
 }
 
 int BLEBroadcaster::_GATTInit() {
-  int ret = 0;
+    int ret = 0;
 
-  ble_svc_gatt_init();
+    ble_svc_gatt_init();
+    struct ble_gatt_svc_def gatt_svr_svcs[_emitterToHandle.size()];
+  
+    int i = 0;
+    for (const auto& [key, value] : _emitterToHandle) {
+        Callback<int(uint16_t, uint16_t, ble_gatt_access_ctxt *, void *)>::func = std::bind(&BLEEmitter::AccessData, key, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4);
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+        gatt_svr_svcs[i].type = key->GetServiceType();
+        gatt_svr_svcs[i].uuid = &key->GetServiceUUID().u;
+        gatt_svr_svcs[i].characteristics = (struct ble_gatt_chr_def[]){
+            {
+                .uuid = &key->GetCharacteristicUUID().u,
+                .access_cb =
+                Callback<int(uint16_t, uint16_t, ble_gatt_access_ctxt *,
+                             void *)>::callback,
+                // can add a flags to the emitter
+                .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_INDICATE,
+                .val_handle = value
+            },
+            {
+                0, /* No more characteristics in this service. */
+            },
+        };
+    }
 
-  /* 2. Update GATT services counter */
-  // need to build this from our emitters
-  // ret = ble_gatts_count_cfg(gatt_svr_svcs);
+    ret = ble_gatts_count_cfg(gatt_svr_svcs);
+    if (ret != 0) {
+        return ret;
+    }
+    ret = ble_gatts_add_svcs(gatt_svr_svcs);
+    if (ret != 0) {
+        return ret;
+    }
 
-  return ret;
+
+    return ret;
 }
 
 int BLEBroadcaster::_HostConfig() {
@@ -204,6 +252,7 @@ void BLEBroadcaster::_InitAdvertising() {
 void BLEBroadcaster::_StartAdvertising()
 {
     int rc = 0;
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
     struct ble_hs_adv_fields adv_fields = {0};
     struct ble_hs_adv_fields rsp_fields = {0};
     struct ble_gap_adv_params adv_params = {0};
