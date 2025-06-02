@@ -43,10 +43,10 @@ protected:
 private:
     std::string _name;
 
-    std::map<BLEEmitter*,uint16_t*> _emitterToHandle;
+    std::vector<BLEEmitter*> _emitters;
 
-    std::vector<ble_gatt_svc_def> _gattSvcs;
-    
+    // we need this to stick around in memory because NimBLE uses it by reference
+    ble_gatt_svc_def  *_gatt_svr_svcs;
     uint8_t _ownAddrType;
     uint8_t _addrVal[6];
 

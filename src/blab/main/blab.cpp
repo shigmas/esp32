@@ -19,8 +19,9 @@ extern "C" {
 
 static void nimble_host_task(void *param) {
     /* This function won't return until nimble_port_stop() is executed */
+    ESP_LOGI(TAG, "nimble_host_task!");
     nimble_port_run();
-
+    ESP_LOGI(TAG, "nimble_host_task completed!");
     /* Clean up at exit */
     vTaskDelete(NULL);
 }
@@ -28,7 +29,7 @@ static void nimble_host_task(void *param) {
 static void broadcast_task(void *param) {
     BLEBroadcaster *b = (BLEBroadcaster *)param;
     /* Task entry log */
-    ESP_LOGI(TAG, "nimble host task has been started!");
+    ESP_LOGI(TAG, "broadcast_task!");
 
   while (1) {
       /* Update heart rate value every 1 second */

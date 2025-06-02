@@ -1,7 +1,7 @@
+
 #include "BLEBroadcaster.h"
 
 #include "esp_log.h"
-
 
 #include "host/ble_hs.h"
 #include "host/ble_uuid.h"
@@ -14,10 +14,6 @@
 #include "host/ble_gap.h"
 #include "services/gap/ble_svc_gap.h"
 
-/* NimBLE GATT APIs */
-#include "host/ble_gatt.h"
-#include "services/gatt/ble_svc_gatt.h"
-
 // ble_store_config_init
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
@@ -26,10 +22,9 @@
 #include "host/util/util.h"
 #include "services/gap/ble_svc_gap.h"
 
+#include "CallbackDef.h"
 
 #include "nvs_flash.h"
-
-#include <functional>
 
 #include "BLEEmitter.h"
 
@@ -50,19 +45,6 @@ static uint8_t esp_uri[] = {BLE_GAP_URI_PREFIX_HTTPS, '/', '/', 'e', 's', 'p', '
 struct ble_hs_adv_fields;
 struct ble_gap_adv_params;
 
-// helper template for converting std::bind functions to C
-template <typename T>
-struct Callback;
-
-template <typename Ret, typename... Params> struct Callback<Ret(Params...)> {
-    template <typename... Args> 
-        static Ret callback(Args... args) {                    
-        return func(args...);  
-    }
-    static std::function<Ret(Params...)> func; 
-};
-
-template <typename Ret, typename... Params> std::function<Ret(Params...)> Callback<Ret(Params...)>::func;
 
 inline static void format_addr(char *addr_str, uint8_t addr[]) {
     sprintf(addr_str, "%02X:%02X:%02X:%02X:%02X:%02X", addr[0], addr[1],
@@ -73,10 +55,8 @@ BLEBroadcaster::BLEBroadcaster(const std::string &name) : _name(name) {}
 
 BLEBroadcaster::~BLEBroadcaster()
 {
-    for (const auto& [key, value] : _emitterToHandle) {
-        delete value;
-    }
-    
+    ESP_LOGI(TAG,"BLEBroadcaster::~BLEBroadcaster()");
+    delete [] _gatt_svr_svcs;
 }
 
 void BLEBroadcaster::Init() {
@@ -91,22 +71,22 @@ void BLEBroadcaster::Init() {
         return;
     }
 
-    _GAPInit();
-    _GATTInit();
-    _HostConfig();
+    ESP_ERROR_CHECK(_GAPInit());
+    ESP_ERROR_CHECK(_GATTInit());
+    ESP_ERROR_CHECK(_HostConfig());
     
     return;
 }
 
 void BLEBroadcaster::AddEmitter(BLEEmitter *emitter) {
-    _emitterToHandle[emitter] = new uint16_t;
+    _emitters.push_back(emitter);
 }
 
 uint32_t BLEBroadcaster::GetBroadcastInterval() const {
     uint32_t min = UINT32_MAX;
-    for (const auto& [key, value] : _emitterToHandle) {
-        if (key->GetEmissionInterval() < min) {
-            min = key->GetEmissionInterval();
+    for (const auto& emitter : _emitters) {
+        if (emitter->GetEmissionInterval() < min) {
+            min = emitter->GetEmissionInterval();
         }
     }
     return min;
@@ -150,39 +130,31 @@ int BLEBroadcaster::_GATTInit() {
     int ret = 0;
 
     ble_svc_gatt_init();
-    struct ble_gatt_svc_def gatt_svr_svcs[_emitterToHandle.size()];
-  
+    // the functions that we pass this variable to check for the end by looking for a 0 trailing
+    // element
+    _gatt_svr_svcs = new ble_gatt_svc_def[_emitters.size()+1];
+    
     int i = 0;
-    for (const auto& [key, value] : _emitterToHandle) {
-        Callback<int(uint16_t, uint16_t, ble_gatt_access_ctxt *, void *)>::func = std::bind(&BLEEmitter::AccessData, key, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4);
-#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
-        gatt_svr_svcs[i].type = key->GetServiceType();
-        gatt_svr_svcs[i].uuid = &key->GetServiceUUID().u;
-        gatt_svr_svcs[i].characteristics = (struct ble_gatt_chr_def[]){
-            {
-                .uuid = &key->GetCharacteristicUUID().u,
-                .access_cb =
-                Callback<int(uint16_t, uint16_t, ble_gatt_access_ctxt *,
-                             void *)>::callback,
-                // can add a flags to the emitter
-                .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_INDICATE,
-                .val_handle = value
-            },
-            {
-                0, /* No more characteristics in this service. */
-            },
-        };
+    for (const auto& emitter : _emitters) {
+        _gatt_svr_svcs[i] = emitter->GetService();
+        i++;
     }
+    _gatt_svr_svcs[i] = {0};
 
-    ret = ble_gatts_count_cfg(gatt_svr_svcs);
-    if (ret != 0) {
-        return ret;
-    }
-    ret = ble_gatts_add_svcs(gatt_svr_svcs);
+    ESP_LOGI(TAG, "count_cfg");
+    ret = ble_gatts_count_cfg(_gatt_svr_svcs);
     if (ret != 0) {
         return ret;
     }
 
+    ret = ble_gatts_add_svcs(_gatt_svr_svcs);
+    if (ret != 0) {
+        return ret;
+    }
+    ESP_LOGI(TAG, "_GATTInit: success to add svcs");
+    for (const auto &emitter : _emitters) {
+        ESP_LOGI(TAG, "_GATTInit:post handle: %d", emitter->GetHandle());
+    }
 
     return ret;
 }
@@ -195,21 +167,24 @@ int BLEBroadcaster::_HostConfig() {
     Callback<void()>::func = std::bind(&BLEBroadcaster::_OnStackSync, this);
     ble_hs_cfg.sync_cb = Callback<void()>::callback;
     // ble_hs_cfg.gatts_register_cb = gatt_svr_register_cb;
-    ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
+    //ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
 
+    ESP_LOGI(TAG, "ble_store_config_init()");
     /* Store host configuration */
-    ble_store_config_init();
-
+    //ble_store_config_init();
+    ESP_LOGI(TAG, "ble_store_config_init over");
     return 0;
 }
 
-void BLEBroadcaster::_OnStackReset(int reason) {}
+void BLEBroadcaster::_OnStackReset(int reason) {
+    ESP_LOGI(TAG, "_OnStackReset: %d", reason);
+}
 
 void BLEBroadcaster::_OnStackSync() {
-  ESP_LOGI(TAG, "StackSync. Starting Advertising");
+    ESP_LOGI(TAG, "StackSync. Starting Advertising");
 
-  _InitAdvertising();
-  _StartAdvertising();
+    _InitAdvertising();
+    _StartAdvertising();
 }
 
 int BLEBroadcaster::_GapEventHandler(struct ble_gap_event *event, void *arg)
