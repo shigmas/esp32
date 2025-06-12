@@ -6,6 +6,8 @@
 #include "esp_log.h"
 #include "esp_random.h"
 
+#include "host/ble_gap.h"
+
 // for portTICK_PERIOD_MS
 #include <freertos/FreeRTOS.h>
 
@@ -14,7 +16,7 @@
 
 #define SUBTAG "REMOVE"
 
-#define HEART_RATE_TASK_PERIOD (1000 / portTICK_PERIOD_MS)
+#define DUMMY_TASK_PERIOD (1000 / portTICK_PERIOD_MS)
 
 class BLEDummyEmitter : public BLEEmitter {
 
@@ -29,9 +31,30 @@ public:
     virtual ~BLEDummyEmitter() {}
 
     virtual uint32_t GetEmissionInterval() const override {
-        return HEART_RATE_TASK_PERIOD;
+        return DUMMY_TASK_PERIOD;
+    }
+    virtual void Emit() override {
+        // wait for initialization
+        if (IsConnectionHandleSet()) {
+            ESP_LOGI(SUBTAG, "BLEDummyEmitter::Emit ble_gatts_indicate");
+            ble_gatts_indicate(GetConnectionHandle(), *GetCharacteristicHandle());
+        } else {
+            ESP_LOGI(SUBTAG, "BLEDummyEmitter::Emit not ready to emit");
+        }
     }
 
+    virtual void SubscribeHandler(struct ble_gap_event *event) override{
+        // is this my subscribe?
+        if (event->subscribe.attr_handle == *GetCharacteristicHandle()) {
+            SetConnectionHandle(event->subscribe.conn_handle);
+            ESP_LOGI(SUBTAG, "BLEDummyEmitter::subscrive.cur_indicate: %d", event->subscribe.cur_indicate);
+            //heart_rate_ind_status = event->subscribe.cur_indicate;
+        } else {
+          ESP_LOGI(SUBTAG,
+                   "BLEDummyEmitter::subscribe - not my characteristic: %d",
+                   event->subscribe.attr_handle);
+        }
+    }
     // https://www.bluetooth.com/wp-content/uploads/Files/Specification/HTML/Assigned_Numbers/out/en/Assigned_Numbers.pdf
     //  environmental sensing service
     virtual ble_uuid16_t& _GetServiceUUID() override { return _serviceUUID ; }
@@ -40,6 +63,7 @@ public:
       return _characteristicUUID;
     }
 
+    // doesn't need to be public
     virtual int AccessData(uint16_t conn_handle, uint16_t attr_handle,
                            ble_gatt_access_ctxt *ctxt, void *arg) override {
         ESP_LOGI(SUBTAG, "BLEDummyEmitter::AccessData() callback");

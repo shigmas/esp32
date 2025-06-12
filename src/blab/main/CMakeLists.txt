@@ -3,6 +3,7 @@ idf_component_register(SRCS
   "BLEBroadcaster.cpp"
   "BLEEmitter.cpp"
   "BLEDummyEmitter.cpp"
+  "BLEStrings.cpp"
   REQUIRES bt nvs_flash
   INCLUDE_DIRS "." "include"
 )

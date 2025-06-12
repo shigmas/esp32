@@ -6,10 +6,10 @@
 
 #define TAG "BLEEmitter"
 
+// move this to the subclass - this only does one characteristic.
 ble_gatt_svc_def BLEEmitter::GetService() {
     Callback<int(uint16_t, uint16_t, ble_gatt_access_ctxt *, void *)>::func = std::bind(&BLEEmitter::AccessData, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4);
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
-    ESP_LOGI(TAG, "Using dynamically allocated array");
     _characteristics[0] = {
         // ble_uuid_t: just the type, but I guess the first element
         // of the struct is basically the ref to the struct?
@@ -20,7 +20,7 @@ ble_gatt_svc_def BLEEmitter::GetService() {
         // can add a flags to the emitter
         .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_INDICATE,
         // 'value' is const &, so fetch it.
-        .val_handle = GetHandle(),
+        .val_handle = GetCharacteristicHandle(),
     };
     _characteristics[1] = {
         0, /* No more characteristics in this service. */
