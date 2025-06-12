@@ -27,8 +27,9 @@
 #include "nvs_flash.h"
 
 #include "BLEEmitter.h"
+#include "BLEStrings.h"
 
-#define TAG "blab"
+#define TAG "Broadcaster"
 
 extern "C" {
     // declare it now. It's defined later
@@ -92,7 +93,11 @@ uint32_t BLEBroadcaster::GetBroadcastInterval() const {
     return min;
 }
 
-void BLEBroadcaster::Broadcast() {}
+void BLEBroadcaster::Broadcast() {
+    for (const auto& emitter : _emitters) {
+        emitter->Emit();
+    }
+}
 
 int BLEBroadcaster::_NVSInit() {
     esp_err_t ret;
@@ -139,9 +144,9 @@ int BLEBroadcaster::_GATTInit() {
         _gatt_svr_svcs[i] = emitter->GetService();
         i++;
     }
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
     _gatt_svr_svcs[i] = {0};
 
-    ESP_LOGI(TAG, "count_cfg");
     ret = ble_gatts_count_cfg(_gatt_svr_svcs);
     if (ret != 0) {
         return ret;
@@ -151,11 +156,11 @@ int BLEBroadcaster::_GATTInit() {
     if (ret != 0) {
         return ret;
     }
-    ESP_LOGI(TAG, "_GATTInit: success to add svcs");
-    for (const auto &emitter : _emitters) {
-        ESP_LOGI(TAG, "_GATTInit:post handle: %d", emitter->GetHandle());
+    for (const auto& emitter : _emitters) {
+        ESP_LOGI(TAG,"GATTInit: emitter val handle: %d", *emitter->GetCharacteristicHandle());
+        i++;
     }
-
+    
     return ret;
 }
 
@@ -166,13 +171,12 @@ int BLEBroadcaster::_HostConfig() {
     ble_hs_cfg.reset_cb = Callback<void(int)>::callback;
     Callback<void()>::func = std::bind(&BLEBroadcaster::_OnStackSync, this);
     ble_hs_cfg.sync_cb = Callback<void()>::callback;
-    // ble_hs_cfg.gatts_register_cb = gatt_svr_register_cb;
+    Callback<void(struct ble_gatt_register_ctxt *ctxt, void *arg)>::func = std::bind(&BLEBroadcaster::_GATTRegisterHandler, this, std::placeholders::_1, std::placeholders::_2);
+    ble_hs_cfg.gatts_register_cb = Callback<void(struct ble_gatt_register_ctxt *ctxt, void *arg)>::callback;
     //ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
 
-    ESP_LOGI(TAG, "ble_store_config_init()");
     /* Store host configuration */
-    //ble_store_config_init();
-    ESP_LOGI(TAG, "ble_store_config_init over");
+   ble_store_config_init();
     return 0;
 }
 
@@ -187,11 +191,97 @@ void BLEBroadcaster::_OnStackSync() {
     _StartAdvertising();
 }
 
-int BLEBroadcaster::_GapEventHandler(struct ble_gap_event *event, void *arg)
+int BLEBroadcaster::_GAPEventHandler(struct ble_gap_event *event, void *arg)
 {
     ESP_LOGI(TAG, "GAP Event Handler");
+    int rc = 0;
+    //struct ble_gap_conn_desc desc;
 
-    return 0;
+    /* Handle different GAP event */
+    switch (event->type) {
+    case BLE_GAP_EVENT_CONNECT:
+
+        ESP_LOGI(TAG, "connection %s; status=%d",
+                 event->connect.status == 0 ? "established" : "failed",
+                 event->connect.status);
+        break;
+    case BLE_GAP_EVENT_DISCONNECT:
+        /* A connection was terminated, print connection descriptor */
+        ESP_LOGI(TAG, "disconnected from peer; reason=%d",
+                 event->disconnect.reason);
+        _StartAdvertising();
+
+        break;
+    case BLE_GAP_EVENT_CONN_UPDATE:
+        /* The central has updated the connection parameters. */
+        ESP_LOGI(TAG, "connection updated; status=%d",
+                 event->conn_update.status);
+        _StartAdvertising();
+        break;
+    case BLE_GAP_EVENT_ADV_COMPLETE:
+        /* Advertising completed, restart advertising */
+        ESP_LOGI(TAG, "advertise complete; reason=%d",
+                 event->adv_complete.reason);
+        _StartAdvertising();
+        break;
+    case BLE_GAP_EVENT_NOTIFY_TX:
+        ESP_LOGI(TAG, "Notify");
+        break;
+    case BLE_GAP_EVENT_SUBSCRIBE:
+        /* Print subscription info to log */
+        ESP_LOGI(TAG,
+                 "subscribe event; conn_handle=%d attr_handle=%d "
+                 "reason=%d prevn=%d curn=%d previ=%d curi=%d",
+                 event->subscribe.conn_handle, event->subscribe.attr_handle,
+                 event->subscribe.reason, event->subscribe.prev_notify,
+                 event->subscribe.cur_notify, event->subscribe.prev_indicate,
+                 event->subscribe.cur_indicate);
+
+        /* GATT subscribe event callback */
+        for (const auto& emitter : _emitters) {
+            emitter->SubscribeHandler(event);
+        }
+
+        break;
+     case BLE_GAP_EVENT_MTU:
+        /* Print MTU update info to log */
+        ESP_LOGI(TAG, "mtu update event; conn_handle=%d cid=%d mtu=%d",
+                 event->mtu.conn_handle, event->mtu.channel_id,
+                 event->mtu.value);
+        break;
+    default:
+        ESP_LOGI(TAG, "unhandled GAP event: %d (%s)",event->type,GetGAPEventType(event).c_str());
+    }
+    return rc;
+}
+
+void BLEBroadcaster::_GATTRegisterHandler(struct ble_gatt_register_ctxt *ctxt, void *arg)
+{
+    char buf[128];
+    switch (ctxt->op) {
+    case BLE_GATT_REGISTER_OP_SVC:
+        /* Service register event */
+        ESP_LOGI(TAG, "registered service %s with handle=%d",
+                 ble_uuid_to_str(ctxt->svc.svc_def->uuid, buf), ctxt->svc.handle);
+        break;
+    case BLE_GATT_REGISTER_OP_CHR:
+        /* Characteristic register event */
+        ESP_LOGI(TAG,
+                 "registering characteristic %s with "
+                 "def_handle=%d val_handle=%d",
+                 ble_uuid_to_str(ctxt->chr.chr_def->uuid, buf),
+                 ctxt->chr.def_handle, ctxt->chr.val_handle);
+        break;
+    case BLE_GATT_REGISTER_OP_DSC:
+        /* Descriptor register event */
+        ESP_LOGI(TAG, "registering descriptor %s with handle=%d",
+                 ble_uuid_to_str(ctxt->dsc.dsc_def->uuid, buf), ctxt->dsc.handle);
+        break;
+    default:
+        ESP_LOGI(TAG, "Unhandled registration event: %s", GetGATTRegisterOp(ctxt).c_str());
+        /* Unknown event */
+        break;
+    }
 }
 
 void BLEBroadcaster::_InitAdvertising() {
@@ -220,7 +310,7 @@ void BLEBroadcaster::_InitAdvertising() {
         return;
     }
     format_addr(addr_str, _addrVal);
-    ESP_LOGI(TAG, "device address: %s", addr_str);
+    ESP_LOGI(TAG, "InitAdvertising: device address: %s", addr_str);
 }
 
 
@@ -252,7 +342,7 @@ void BLEBroadcaster::_StartAdvertising()
     adv_fields.le_role = BLE_GAP_LE_ROLE_PERIPHERAL;
     adv_fields.le_role_is_present = 1;
 
-    /* Set advertiement fields */
+    /* Set advertisement fields */
     rc = ble_gap_adv_set_fields(&adv_fields);
     if (rc != 0) {
         ESP_LOGE(TAG, "failed to set advertising data, error code: %d", rc);
@@ -288,11 +378,11 @@ void BLEBroadcaster::_StartAdvertising()
     adv_params.itvl_max = BLE_GAP_ADV_ITVL_MS(510);
 
     /* Start advertising */
-    Callback<int(struct ble_gap_event *event, void *arg)>::func = std::bind(&BLEBroadcaster::_GapEventHandler, this, std::placeholders::_1, std::placeholders::_2);
+    Callback<int(struct ble_gap_event *event, void *arg)>::func = std::bind(&BLEBroadcaster::_GAPEventHandler, this, std::placeholders::_1, std::placeholders::_2);
     rc = ble_gap_adv_start(_ownAddrType, NULL, BLE_HS_FOREVER, &adv_params, Callback<int(struct ble_gap_event *event, void *arg)>::callback, NULL);
     if (rc != 0) {
         ESP_LOGE(TAG, "failed to start advertising, error code: %d", rc);
         return;
     }
-    ESP_LOGI(TAG, "advertising started!");
+    ESP_LOGI(TAG, "StartAdvertising: advertising started!");
 }

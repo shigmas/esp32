@@ -38,8 +38,8 @@ protected:
     void _InitAdvertising();
     void _StartAdvertising();
 
-    int _GapEventHandler(struct ble_gap_event *event, void *arg);
-
+    int _GAPEventHandler(struct ble_gap_event *event, void *arg);
+    void _GATTRegisterHandler(struct ble_gatt_register_ctxt *ctxt, void *arg);
 private:
     std::string _name;
 
