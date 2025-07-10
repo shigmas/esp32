@@ -30,6 +30,8 @@ public:
           _characteristicUUID(BLE_UUID16_INIT(0x2A6E)) {}
     virtual ~BLEDummyEmitter() {}
 
+    virtual ble_gatt_svc_def GetService() override;
+
     virtual uint32_t GetEmissionInterval() const override {
         return DUMMY_TASK_PERIOD;
     }
@@ -39,27 +41,20 @@ public:
             ESP_LOGI(SUBTAG, "BLEDummyEmitter::Emit ble_gatts_indicate");
             ble_gatts_indicate(GetConnectionHandle(), *GetCharacteristicHandle());
         } else {
-            ESP_LOGI(SUBTAG, "BLEDummyEmitter::Emit not ready to emit");
+            //ESP_LOGI(SUBTAG, "BLEDummyEmitter::Emit not ready to emit");
         }
     }
 
     virtual void SubscribeHandler(struct ble_gap_event *event) override{
-        // is this my subscribe?
-        if (event->subscribe.attr_handle == *GetCharacteristicHandle()) {
-            SetConnectionHandle(event->subscribe.conn_handle);
-            ESP_LOGI(SUBTAG, "BLEDummyEmitter::subscrive.cur_indicate: %d", event->subscribe.cur_indicate);
-            //heart_rate_ind_status = event->subscribe.cur_indicate;
-        } else {
-          ESP_LOGI(SUBTAG,
-                   "BLEDummyEmitter::subscribe - not my characteristic: %d",
-                   event->subscribe.attr_handle);
-        }
+        SetConnectionHandle(event->subscribe.conn_handle);
+        ESP_LOGI(SUBTAG, "BLEDummyEmitter::subscrive.cur_indicate: %d", event->subscribe.cur_indicate);
+        //heart_rate_ind_status = event->subscribe.cur_indicate;
     }
     // https://www.bluetooth.com/wp-content/uploads/Files/Specification/HTML/Assigned_Numbers/out/en/Assigned_Numbers.pdf
     //  environmental sensing service
-    virtual ble_uuid16_t& _GetServiceUUID() override { return _serviceUUID ; }
+    virtual ble_uuid16_t& GetServiceUUID() override { return _serviceUUID ; }
     // temperature
-    virtual ble_uuid16_t &_GetCharacteristicUUID() override {
+    virtual ble_uuid16_t& GetCharacteristicUUID() override {
       return _characteristicUUID;
     }
 

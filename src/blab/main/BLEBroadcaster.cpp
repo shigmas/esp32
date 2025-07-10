@@ -176,7 +176,7 @@ int BLEBroadcaster::_HostConfig() {
     //ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
 
     /* Store host configuration */
-   ble_store_config_init();
+    ble_store_config_init();
     return 0;
 }
 
@@ -201,9 +201,10 @@ int BLEBroadcaster::_GAPEventHandler(struct ble_gap_event *event, void *arg)
     switch (event->type) {
     case BLE_GAP_EVENT_CONNECT:
 
-        ESP_LOGI(TAG, "connection %s; status=%d",
+        ESP_LOGI(TAG, "connection %s; status=%d, handle: %d",
                  event->connect.status == 0 ? "established" : "failed",
-                 event->connect.status);
+                 event->connect.status, event->connect.conn_handle);
+        _connectionHandle = event->connect.conn_handle;
         break;
     case BLE_GAP_EVENT_DISCONNECT:
         /* A connection was terminated, print connection descriptor */
@@ -258,19 +259,44 @@ int BLEBroadcaster::_GAPEventHandler(struct ble_gap_event *event, void *arg)
 void BLEBroadcaster::_GATTRegisterHandler(struct ble_gatt_register_ctxt *ctxt, void *arg)
 {
     char buf[128];
+    ble_uuid16_t *uuid16 = NULL;
+
+    // This is kind of like a state machine. The service is registered, followed by the
+    // characteristics, then the next service and its characteristics.
     switch (ctxt->op) {
     case BLE_GATT_REGISTER_OP_SVC:
         /* Service register event */
+        // https://www.bluetooth.com/wp-content/uploads/Files/Specification/HTML/Assigned_Numbers/out/en/Assigned_Numbers.pdf
+        // pg 69
         ESP_LOGI(TAG, "registered service %s with handle=%d",
                  ble_uuid_to_str(ctxt->svc.svc_def->uuid, buf), ctxt->svc.handle);
+        if (ctxt->svc.svc_def->uuid->type == BLE_UUID_TYPE_16) {
+            uuid16 = (ble_uuid16_t *)ctxt->svc.svc_def->uuid;
+        }
+        for (auto emitter : _emitters) {
+            //            if ((uuid16 != NULL) && (emitter->GetServiceUUID().value == uuid16->value)) {
+                emitter->RegisterServiceHandle(uuid16->value, ctxt->svc.handle);
+                //            }
+        }
         break;
     case BLE_GATT_REGISTER_OP_CHR:
         /* Characteristic register event */
+        // https://www.bluetooth.com/wp-content/uploads/Files/Specification/HTML/Assigned_Numbers/out/en/Assigned_Numbers.pdf
+        // pg 96
         ESP_LOGI(TAG,
                  "registering characteristic %s with "
                  "def_handle=%d val_handle=%d",
                  ble_uuid_to_str(ctxt->chr.chr_def->uuid, buf),
                  ctxt->chr.def_handle, ctxt->chr.val_handle);
+        for (auto emitter : _emitters) {
+            BlabError err = emitter->SetCharacteristicHandlesForUUID(ctxt->chr.chr_def->uuid,
+                                                                     ctxt->chr.def_handle,
+                                                                     ctxt->chr.val_handle);
+            if (err) {
+                ESP_LOGI(TAG, "unable to store handles: %s", err->String().c_str());
+            }
+        }
+
         break;
     case BLE_GATT_REGISTER_OP_DSC:
         /* Descriptor register event */

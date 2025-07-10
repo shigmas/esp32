@@ -40,6 +40,7 @@ protected:
 
     int _GAPEventHandler(struct ble_gap_event *event, void *arg);
     void _GATTRegisterHandler(struct ble_gatt_register_ctxt *ctxt, void *arg);
+    
 private:
     std::string _name;
 
@@ -47,6 +48,7 @@ private:
 
     // we need this to stick around in memory because NimBLE uses it by reference
     ble_gatt_svc_def  *_gatt_svr_svcs;
+    uint16_t _connectionHandle;
     uint8_t _ownAddrType;
     uint8_t _addrVal[6];
 
