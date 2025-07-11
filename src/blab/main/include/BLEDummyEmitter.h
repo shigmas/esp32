@@ -61,9 +61,8 @@ public:
     // doesn't need to be public
     virtual int AccessData(uint16_t conn_handle, uint16_t attr_handle,
                            ble_gatt_access_ctxt *ctxt, void *arg) override {
-        ESP_LOGI(SUBTAG, "BLEDummyEmitter::AccessData() callback");
         _value= 60 + (uint8_t)(esp_random() % 21);
-        ESP_LOGI(SUBTAG, "BLEDummyEmitter::AccessData() - %d", _value);
+        ESP_LOGI(SUBTAG, "BLEDummyEmitter::AccessData() - %f", _value);
         return _value;
     }
 
