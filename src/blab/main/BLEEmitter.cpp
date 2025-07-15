@@ -5,33 +5,35 @@
 #include "CallbackDef.h"
 
 #define TAG "BLEEmitter"
+uint16_t BLEEmitter::GetServiceHandleForUUID(const uint16_t& uuidValue) {
+    return _serviceUUIDToHandles[uuidValue]; }
 
-// move this to the subclass - this only does one characteristic.
-ble_gatt_svc_def BLEEmitter::GetService() {
-    Callback<int(uint16_t, uint16_t, ble_gatt_access_ctxt *, void *)>::func = std::bind(&BLEEmitter::AccessData, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4);
-#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
-    _characteristics[0] = {
-        // ble_uuid_t: just the type, but I guess the first element
-        // of the struct is basically the ref to the struct?
-        .uuid = &_GetCharacteristicUUID().u,
-        .access_cb =
-        Callback<int(uint16_t, uint16_t, ble_gatt_access_ctxt *,
-                     void *)>::callback,
-        // can add a flags to the emitter
-        .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_INDICATE,
-        // 'value' is const &, so fetch it.
-        .val_handle = GetCharacteristicHandle(),
-    };
-    _characteristics[1] = {
-        0, /* No more characteristics in this service. */
-    };
+void BLEEmitter::RegisterServiceHandle(const uint16_t& uuidValue,
+                                           const uint16_t& handle) {
+    _currentServiceUUID = uuidValue;
+    _serviceUUIDToHandles[uuidValue] = handle;
 
-    ble_gatt_svc_def svc = {
-      .type = GetServiceType(),
-      // ble_uuid_t: just the type
-      .uuid = &_GetServiceUUID().u,
-      .characteristics = _characteristics,
-    };
+    _handleToUUIDMap[handle] = uuidValue;
+}
 
-    return svc;
+BlabError BLEEmitter::SetCharacteristicHandlesForUUID(const ble_uuid_t *uuid,
+                                                      const uint16_t &defHandle,
+                                                      const uint16_t &valHandle) {
+    // we constantly look up the current service and then get the current handle
+    // map. It would be better to build up a current handle map, then set it when
+    // we get the next service registration.
+    if (uuid->type != BLE_UUID_TYPE_16) {
+        return BlabError("invalud UUID type");
+    }
+    if (_currentServiceUUID == 0) {
+      return BlabError("no service being registered");
+    }
+    ble_uuid16_t * uuid16 = (ble_uuid16_t *)uuid;
+    CharacteristicHandleMap& charHandles = _serviceCharsMap[_currentServiceUUID];
+    charHandles[uuid16->value] = std::make_pair(defHandle, valHandle);
+    // if not by value, need to set it again
+    _handleToUUIDMap[defHandle] = uuid16->value;
+    _handleToUUIDMap[valHandle] = uuid16->value;
+  
+    return BlabError();
 }

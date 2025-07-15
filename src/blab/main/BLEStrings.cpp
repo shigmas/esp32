@@ -81,7 +81,7 @@ std::string GetGAPEventType(struct ble_gap_event *event) {
         return "GAPEventCteReqFailed";
     case BLE_GAP_EVENT_LINK_ESTAB:
         return "GAPEventLinkEstablished";
-    case BLE_GAP_EVENT_EATT
+    case BLE_GAP_EVENT_EATT:
         return "GAPEventEAtt";
     case BLE_GAP_EVENT_PER_SUBEV_DATA_REQ:
         return "GAPEventPerSubDataRequest";

@@ -32,6 +32,7 @@ static void broadcast_task(void *param) {
     while (1) {
         /* Sleep */
         vTaskDelay(b->GetBroadcastInterval());
+        b->Broadcast();
     }
 
     /* Clean up at exit */
