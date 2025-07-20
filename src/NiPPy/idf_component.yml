@@ -1,0 +1,7 @@
+version: "0.0.1"
+description: "C++ API over the NimBLE API"
+url: "https://github.com/shigmas/NiPPy"
+license: "MIT"
+dependencies:
+  idf:
+    version: ">5.0.0"
