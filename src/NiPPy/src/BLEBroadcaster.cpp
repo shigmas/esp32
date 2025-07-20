@@ -27,6 +27,7 @@
 #include "nvs_flash.h"
 
 #include "BLEEmitter.h"
+#include "BLEEmitterContainer.h"
 #include "BLEStrings.h"
 
 #define TAG "Broadcaster"
@@ -52,11 +53,16 @@ inline static void format_addr(char *addr_str, uint8_t addr[]) {
             addr[2], addr[3], addr[4], addr[5]);
 }
 
-BLEBroadcaster::BLEBroadcaster(const std::string &name) : _name(name) {}
+BLEBroadcaster::BLEBroadcaster(const std::string &name) : _name(name)
+{
+    // make sure this is the absolute last thing we do, so keep it out of the initializer list
+    _emitters = new BLEEmitterContainer();
+}
 
 BLEBroadcaster::~BLEBroadcaster()
 {
     ESP_LOGI(TAG,"BLEBroadcaster::~BLEBroadcaster()");
+    delete _emitters;
     delete [] _gatt_svr_svcs;
 }
 
@@ -80,23 +86,15 @@ void BLEBroadcaster::Init() {
 }
 
 void BLEBroadcaster::AddEmitter(BLEEmitter *emitter) {
-    _emitters.push_back(emitter);
+    _emitters->AddEmitter(emitter);
 }
 
 uint32_t BLEBroadcaster::GetBroadcastInterval() const {
-    uint32_t min = UINT32_MAX;
-    for (const auto& emitter : _emitters) {
-        if (emitter->GetEmissionInterval() < min) {
-            min = emitter->GetEmissionInterval();
-        }
-    }
-    return min;
+    return _emitters->GetBroadcastInterval();
 }
 
 void BLEBroadcaster::Broadcast() {
-    for (const auto& emitter : _emitters) {
-        emitter->Emit();
-    }
+    _emitters->Emit();
 }
 
 int BLEBroadcaster::_NVSInit() {
@@ -137,10 +135,11 @@ int BLEBroadcaster::_GATTInit() {
     ble_svc_gatt_init();
     // the functions that we pass this variable to check for the end by looking for a 0 trailing
     // element
-    _gatt_svr_svcs = new ble_gatt_svc_def[_emitters.size()+1];
+    ESP_LOGI(TAG, "Num services: [%d]", _emitters->GetNumServices());
+    _gatt_svr_svcs = new ble_gatt_svc_def[_emitters->GetNumServices()+1];
     
     int i = 0;
-    for (const auto& emitter : _emitters) {
+    for (const auto& emitter: *_emitters) {
         _gatt_svr_svcs[i] = emitter->GetService();
         i++;
     }
@@ -156,10 +155,11 @@ int BLEBroadcaster::_GATTInit() {
     if (ret != 0) {
         return ret;
     }
-    for (const auto& emitter : _emitters) {
-        ESP_LOGI(TAG,"GATTInit: emitter val handle: %d", *emitter->GetCharacteristicHandle());
-        i++;
-    }
+
+    // for (const auto& emitter : _emitters) {
+    //     ESP_LOGI(TAG,"GATTInit: emitter val handle: %d", *emitter->GetCharacteristicHandle());
+    //     i++;
+    // }
     
     return ret;
 }
@@ -239,7 +239,7 @@ int BLEBroadcaster::_GAPEventHandler(struct ble_gap_event *event, void *arg)
                  event->subscribe.cur_indicate);
 
         /* GATT subscribe event callback */
-        for (const auto& emitter : _emitters) {
+        for (const auto& emitter : *_emitters) {
             emitter->SubscribeHandler(event);
         }
 
@@ -260,6 +260,7 @@ void BLEBroadcaster::_GATTRegisterHandler(struct ble_gatt_register_ctxt *ctxt, v
 {
     char buf[128];
     ble_uuid16_t *uuid16 = NULL;
+    BlabError err;
 
     // This is kind of like a state machine. The service is registered, followed by the
     // characteristics, then the next service and its characteristics.
@@ -273,11 +274,7 @@ void BLEBroadcaster::_GATTRegisterHandler(struct ble_gatt_register_ctxt *ctxt, v
         if (ctxt->svc.svc_def->uuid->type == BLE_UUID_TYPE_16) {
             uuid16 = (ble_uuid16_t *)ctxt->svc.svc_def->uuid;
         }
-        for (auto emitter : _emitters) {
-            //            if ((uuid16 != NULL) && (emitter->GetServiceUUID().value == uuid16->value)) {
-                emitter->RegisterServiceHandle(uuid16->value, ctxt->svc.handle);
-                //            }
-        }
+        _emitters->RegisterServiceHandle(uuid16->value, ctxt->svc.handle);
         break;
     case BLE_GATT_REGISTER_OP_CHR:
         /* Characteristic register event */
@@ -288,15 +285,12 @@ void BLEBroadcaster::_GATTRegisterHandler(struct ble_gatt_register_ctxt *ctxt, v
                  "def_handle=%d val_handle=%d",
                  ble_uuid_to_str(ctxt->chr.chr_def->uuid, buf),
                  ctxt->chr.def_handle, ctxt->chr.val_handle);
-        for (auto emitter : _emitters) {
-            BlabError err = emitter->SetCharacteristicHandlesForUUID(ctxt->chr.chr_def->uuid,
-                                                                     ctxt->chr.def_handle,
-                                                                     ctxt->chr.val_handle);
-            if (err) {
-                ESP_LOGI(TAG, "unable to store handles: %s", err->String().c_str());
-            }
+        err = _emitters->SetCharacteristicHandlesForUUID(ctxt->chr.chr_def->uuid,
+                                                         ctxt->chr.def_handle,
+                                                         ctxt->chr.val_handle);
+        if (err) {
+            ESP_LOGI(TAG, "unable to store handles: %s", err->String().c_str());
         }
-
         break;
     case BLE_GATT_REGISTER_OP_DSC:
         /* Descriptor register event */

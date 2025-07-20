@@ -11,7 +11,6 @@
 // for portTICK_PERIOD_MS
 #include <freertos/FreeRTOS.h>
 
-
 #include <string>
 
 #define SUBTAG "REMOVE"
@@ -37,16 +36,18 @@ public:
     }
     virtual void Emit() override {
         // wait for initialization
-        if (IsConnectionHandleSet()) {
+        if (_GetHandler()->IsConnectionHandleSet()) {
             ESP_LOGI(SUBTAG, "BLEDummyEmitter::Emit ble_gatts_indicate");
-            ble_gatts_indicate(GetConnectionHandle(), *GetCharacteristicHandle());
+            ble_gatts_indicate(_GetHandler()->GetConnectionHandle(),
+                               _GetHandler()->GetCharacteristicValHandleByUUIDs(_serviceUUID,
+                                                                                _characteristicUUID));
         } else {
             //ESP_LOGI(SUBTAG, "BLEDummyEmitter::Emit not ready to emit");
         }
     }
 
     virtual void SubscribeHandler(struct ble_gap_event *event) override{
-        SetConnectionHandle(event->subscribe.conn_handle);
+        _GetHandler()->SetConnectionHandle(event->subscribe.conn_handle);
         ESP_LOGI(SUBTAG, "BLEDummyEmitter::subscrive.cur_indicate: %d", event->subscribe.cur_indicate);
         //heart_rate_ind_status = event->subscribe.cur_indicate;
     }
