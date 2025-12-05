@@ -22,5 +22,8 @@ build_esp_idf_image:
 	DOCKER_BUILDKIT=1 docker build -t esp_idf --build-arg DIALOUT_GID=$(serialDeviceGid) --build-arg ESP_IDF_VERSION=$(VERSION) -f Dockerfile.esp-idf .
 
 run_esp_idf_image:
-	docker run --rm -it --privileged -v /dev:/dev -v $(PWD)/$(sourceDir):/$(sourceDir) esp_idf /bin/bash
+	docker run -v "$SSH_AUTH_SOCK":"/run/host-services/ssh-auth.sock" \
+	  -e SSH_AUTH_SOCK="/run/host-services/ssh-auth.sock" \
+	--rm -it --privileged -v /dev:/dev -v $(PWD)/$(sourceDir):/$(sourceDir) \
+	esp_idf /bin/bash
 
