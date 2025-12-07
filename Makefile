@@ -3,6 +3,8 @@
 VERSION=master
 
 SHELL := /bin/bash
+HOST_UID = $(shell id -u)
+HOST_GID = $(shell id -g)
 
 # If we were running on the same host as the container, assuming the group ids might be okay,
 # but since we have different distributions of linux, we should at least do this: get the
@@ -22,8 +24,10 @@ build_esp_idf_image:
 	DOCKER_BUILDKIT=1 docker build -t esp_idf --build-arg DIALOUT_GID=$(serialDeviceGid) --build-arg ESP_IDF_VERSION=$(VERSION) -f Dockerfile.esp-idf .
 
 run_esp_idf_image:
-	docker run -v "${SSH_AUTH_SOCK}":/run/host-services/ssh-auth.sock \
-	  -e SSH_AUTH_SOCK=/run/host-services/ssh-auth.sock \
+	docker run \
+	-v ${SSH_AUTH_SOCK}:${SSH_AUTH_SOCK} \
+	-e SSH_AUTH_SOCK=${SSH_AUTH_SOCK} \
+	-v ${HOME}/.ssh:/home/ubuntu/.ssh \
 	--rm -it --privileged -v /dev:/dev -v $(PWD)/$(sourceDir):/$(sourceDir) \
 	esp_idf /bin/bash
 

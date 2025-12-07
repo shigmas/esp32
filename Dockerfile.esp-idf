@@ -19,12 +19,8 @@ RUN DEBIAN_FRONTEND=noninteractive TZ=America/Los_Angeles \
     apt-get install -y sudo vim libssl-dev bc
 
 RUN groupadd -g $DIALOUT_GID $DIALOUT
-RUN useradd -m -s /bin/bash -g $DIALOUT builder && usermod -aG sudo builder
-RUN echo builder:builder | chpasswd
-RUN echo '%sudo ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/010_system_sudoers
-RUN chmod 440 /etc/sudoers.d/010_system_sudoers
-RUN usermod -aG $DIALOUT builder
-USER builder
+RUN usermod -aG $DIALOUT ubuntu
+USER ubuntu
 
 WORKDIR /build/esp
 # switch to branch after checkout
@@ -34,4 +30,4 @@ WORKDIR /build/esp/esp-idf
 RUN git checkout $ESP_IDF_VERSION
 RUN ./install.sh
 
-RUN sh -c "echo . /build/esp/esp-idf/export.sh >> /home/builder/.bashrc"
+RUN sh -c "echo . /build/esp/esp-idf/export.sh >> /home/ubuntu/.bashrc"
