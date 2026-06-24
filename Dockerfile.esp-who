@@ -1,0 +1,26 @@
+FROM esp_idf:latest
+# Taken from
+# https://developer.espressif.com/blog/2026/05/esp-who-get-started/
+# although github example README's (e.g. https://github.com/espressif/esp-who/tree/master/examples/object_detect) are just as good.
+
+ARG ESP_WHO_VERSION
+ARG DIALOUT_GID
+
+ENV DIALOUT=fakedialout
+
+# Other required packages
+#RUN apt-get update && \
+#    DEBIAN_FRONTEND=noninteractive TZ=America/Los_Angeles \
+#    apt-get install -y  git wget flex bison gperf python3 python3-pip python3-setuptools python3-venv  cmake ninja-build ccache libffi-dev libssl-dev dfu-util libusb-1.0-0
+
+USER ubuntu
+
+WORKDIR /build/esp
+# switch to branch after checkout
+RUN git clone --recursive https://github.com/espressif/esp-who.git
+WORKDIR /build/esp/esp-who
+RUN git checkout $ESP_WHO_VERSION
+# same as the main esp-idf, so be extra forceful to update submodulessy
+RUN git submodule sync --recursive
+RUN git submodule update --init --recursive --force
+RUN sh -c "echo export IDF_EXTRA_ACTIONS_PATH=/build/esp/esp-who/tools/ >> /home/ubuntu/.bashrc"
