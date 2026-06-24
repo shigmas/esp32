@@ -28,6 +28,10 @@ WORKDIR /build/esp
 RUN git clone --recursive https://github.com/espressif/esp-idf.git
 WORKDIR /build/esp/esp-idf
 RUN git checkout $ESP_IDF_VERSION
+# sync the submodules. It didn't seem to work with just
+# git submodule update --init --recursive
+RUN git submodule sync --recursive
+RUN git submodule update --init --recursive --force
 RUN ./install.sh
 
 RUN sh -c "echo . /build/esp/esp-idf/export.sh >> /home/ubuntu/.bashrc"
