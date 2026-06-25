@@ -3,8 +3,7 @@
 # plain ESP_IDF version
 IDF_VERSION=v6.0.1
 # ESP_IDF version for ESP-WHO
-#WHO_IDF_VERSION=v5.5.4
-WHO_IDF_VERSION=v6.0.1
+WHO_IDF_VERSION=v5.5.4
 # current master, as the latest release is 8-9 years ago. This is master as of now (2026-06-23) and
 # there have been no changes for 5 months
 ESP_WHO=1681a1c
