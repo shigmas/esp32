@@ -9,6 +9,9 @@ WHO_IDF_VERSION=v6.0.1
 # there have been no changes for 5 months
 ESP_WHO=1681a1c
 
+VISION_IDF_VERSION=v6.0.1
+ESP_VISION=2026.06.22
+
 SHELL := /bin/bash
 HOST_UID = $(shell id -u)
 HOST_GID = $(shell id -g)
@@ -51,3 +54,16 @@ run_esp_who_image:
 	-v ${HOME}/.ssh:/home/ubuntu/.ssh \
 	--rm -it --privileged -v /dev:/dev -v $(PWD)/$(sourceDir):/$(sourceDir) \
 	esp_who /bin/bash
+
+build_esp_vision_image:
+	mkdir -p $(sourceDir) && sudo chgrp $(serialDeviceGroup) $(sourceDir)
+	DOCKER_BUILDKIT=1 docker build -t esp_idf --build-arg DIALOUT_GID=$(serialDeviceGid) --build-arg ESP_IDF_VERSION=$(VISION_IDF_VERSION) -f Dockerfile.esp-idf .
+	DOCKER_BUILDKIT=1 docker build -t esp_who --build-arg DIALOUT_GID=$(serialDeviceGid) --build-arg ESP_WHO_VERSION=$(ESP_VISION_VERSION) -f Dockerfile.esp-vision .
+
+run_esp_vision_image:
+	docker run \
+	-v ${SSH_AUTH_SOCK}:${SSH_AUTH_SOCK} \
+	-e SSH_AUTH_SOCK=${SSH_AUTH_SOCK} \
+	-v ${HOME}/.ssh:/home/ubuntu/.ssh \
+	--rm -it --privileged -v /dev:/dev -v $(PWD)/$(sourceDir):/$(sourceDir) \
+	esp_vision /bin/bash
