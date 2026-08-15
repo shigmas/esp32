@@ -1,4 +1,5 @@
-FROM esp_idf:latest
+ARG ESP_IDF_VERSION
+FROM esp_idf:$ESP_IDF_VERSION
 # Taken from
 # https://developer.espressif.com/blog/2026/05/esp-who-get-started/
 # although github example README's (e.g. https://github.com/espressif/esp-who/tree/master/examples/object_detect) are just as good.

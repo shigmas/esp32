@@ -3,14 +3,13 @@
 # plain ESP_IDF version
 IDF_VERSION=v6.0.1
 # ESP_IDF version for ESP-WHO
-#WHO_IDF_VERSION=v5.5.4
-WHO_IDF_VERSION=v6.0.1
+WHO_IDF_VERSION=v5.5.4
 # current master, as the latest release is 8-9 years ago. This is master as of now (2026-06-23) and
 # there have been no changes for 5 months
 ESP_WHO=1681a1c
 
 VISION_IDF_VERSION=v6.0.1
-ESP_VISION=2026.06.22
+ESP_VISION_VERSION=2026.06.22
 
 SHELL := /bin/bash
 HOST_UID = $(shell id -u)
@@ -44,8 +43,8 @@ run_esp_idf_image:
 
 build_esp_who_image:
 	mkdir -p $(sourceDir) && sudo chgrp $(serialDeviceGroup) $(sourceDir)
-	DOCKER_BUILDKIT=1 docker build -t esp_idf --build-arg DIALOUT_GID=$(serialDeviceGid) --build-arg ESP_IDF_VERSION=$(WHO_IDF_VERSION) -f Dockerfile.esp-idf .
-	DOCKER_BUILDKIT=1 docker build -t esp_who --build-arg DIALOUT_GID=$(serialDeviceGid) --build-arg ESP_WHO_VERSION=$(ESP_WHO_VERSION) -f Dockerfile.esp-who .
+	DOCKER_BUILDKIT=1 docker build -t esp_idf:$(WHO_IDF_VERSION) --build-arg DIALOUT_GID=$(serialDeviceGid) --build-arg ESP_IDF_VERSION=$(WHO_IDF_VERSION) -f Dockerfile.esp-idf .
+	DOCKER_BUILDKIT=1 docker build -t esp_who:$(ESP_WHO) --build-arg DIALOUT_GID=$(serialDeviceGid) --build-arg ESP_IDF_VERSION=$(WHO_IDF_VERSION) --build-arg ESP_WHO_VERSION=$(ESP_WHO) -f Dockerfile.esp-who .
 
 run_esp_who_image:
 	docker run \
@@ -53,12 +52,12 @@ run_esp_who_image:
 	-e SSH_AUTH_SOCK=${SSH_AUTH_SOCK} \
 	-v ${HOME}/.ssh:/home/ubuntu/.ssh \
 	--rm -it --privileged -v /dev:/dev -v $(PWD)/$(sourceDir):/$(sourceDir) \
-	esp_who /bin/bash
+	esp_who:$(ESP_WHO) /bin/bash
 
 build_esp_vision_image:
 	mkdir -p $(sourceDir) && sudo chgrp $(serialDeviceGroup) $(sourceDir)
-	DOCKER_BUILDKIT=1 docker build -t esp_idf --build-arg DIALOUT_GID=$(serialDeviceGid) --build-arg ESP_IDF_VERSION=$(VISION_IDF_VERSION) -f Dockerfile.esp-idf .
-	DOCKER_BUILDKIT=1 docker build -t esp_who --build-arg DIALOUT_GID=$(serialDeviceGid) --build-arg ESP_WHO_VERSION=$(ESP_VISION_VERSION) -f Dockerfile.esp-vision .
+	DOCKER_BUILDKIT=1 docker build -t esp_idf:$(VISION_IDF_VERSION) --build-arg DIALOUT_GID=$(serialDeviceGid) --build-arg ESP_IDF_VERSION=$(VISION_IDF_VERSION) -f Dockerfile.esp-idf .
+	DOCKER_BUILDKIT=1 docker build -t esp_vision:$(ESP_VISION_VERSION) --build-arg DIALOUT_GID=$(serialDeviceGid) --build-arg ESP_IDF_VERSION=$(WHO_IDF_VERSION) --build-arg ESP_VISION_VERSION=$(ESP_VISION_VERSION) -f Dockerfile.esp-vision .
 
 run_esp_vision_image:
 	docker run \
@@ -66,4 +65,4 @@ run_esp_vision_image:
 	-e SSH_AUTH_SOCK=${SSH_AUTH_SOCK} \
 	-v ${HOME}/.ssh:/home/ubuntu/.ssh \
 	--rm -it --privileged -v /dev:/dev -v $(PWD)/$(sourceDir):/$(sourceDir) \
-	esp_vision /bin/bash
+	esp_vision:$(ESP_VISION_VERSION) /bin/bash
